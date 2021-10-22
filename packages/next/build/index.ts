@@ -284,6 +284,14 @@ export default async function build(
         )
       )
     const pageKeys = Object.keys(mappedPages)
+    const hasMiddleware = pageKeys.some((page) => MIDDLEWARE_ROUTE.test(page))
+
+    if (hasMiddleware && !config.experimental.middleware) {
+      console.warn(
+        `Warning: detected _middleware page but the "experimental.middleware" config was not enabled. Please enable it in ${config.configFileName}`
+      )
+    }
+
     const conflictingPublicFiles: string[] = []
     const hasCustomErrorPage: boolean =
       mappedPages['/_error'].startsWith('private-next-pages')
@@ -765,11 +773,9 @@ export default async function build(
     } = await staticCheckSpan.traceAsyncFn(async () => {
       process.env.NEXT_PHASE = PHASE_PRODUCTION_BUILD
 
-      const configFileName = config.configFileName
-      const runtimeEnvConfig = {
-        publicRuntimeConfig: config.publicRuntimeConfig,
-        serverRuntimeConfig: config.serverRuntimeConfig,
-      }
+      const { configFileName, publicRuntimeConfig, serverRuntimeConfig } =
+        config
+      const runtimeEnvConfig = { publicRuntimeConfig, serverRuntimeConfig }
 
       const nonStaticErrorPageSpan = staticCheckSpan.traceChild(
         'check-static-error-page'
@@ -1712,24 +1718,26 @@ export default async function build(
       )
     }
 
-    const middlewareManifest: MiddlewareManifest = JSON.parse(
-      await promises.readFile(
-        path.join(distDir, SERVER_DIRECTORY, MIDDLEWARE_MANIFEST),
-        'utf8'
+    if (config.experimental.middleware) {
+      const middlewareManifest: MiddlewareManifest = JSON.parse(
+        await promises.readFile(
+          path.join(distDir, SERVER_DIRECTORY, MIDDLEWARE_MANIFEST),
+          'utf8'
+        )
       )
-    )
 
-    await promises.writeFile(
-      path.join(
-        distDir,
-        CLIENT_STATIC_FILES_PATH,
-        buildId,
-        '_middlewareManifest.js'
-      ),
-      `self.__MIDDLEWARE_MANIFEST=${devalue(
-        middlewareManifest.sortedMiddleware
-      )};self.__MIDDLEWARE_MANIFEST_CB&&self.__MIDDLEWARE_MANIFEST_CB()`
-    )
+      await promises.writeFile(
+        path.join(
+          distDir,
+          CLIENT_STATIC_FILES_PATH,
+          buildId,
+          '_middlewareManifest.js'
+        ),
+        `self.__MIDDLEWARE_MANIFEST=${devalue(
+          middlewareManifest.sortedMiddleware
+        )};self.__MIDDLEWARE_MANIFEST_CB&&self.__MIDDLEWARE_MANIFEST_CB()`
+      )
+    }
 
     const images = { ...config.images }
     const { deviceSizes, imageSizes } = images
