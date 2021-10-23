@@ -65,6 +65,8 @@ const devtoolRevertWarning = execOnce(
   }
 )
 
+let loggedSwcDisabled = false
+
 function parseJsonFile(filePath: string) {
   const JSON5 = require('next/dist/compiled/json5')
   const contents = readFileSync(filePath, 'utf8')
@@ -297,11 +299,15 @@ export default async function getBaseWebpackConfig(
 
   const distDir = path.join(dir, config.distDir)
 
-  const useSWCLoader = config.experimental.swcLoader
-  if (useSWCLoader && babelConfigFile) {
+  const useSWCLoader = config.experimental.swcLoader && !babelConfigFile
+  if (!loggedSwcDisabled && !useSWCLoader && babelConfigFile) {
     Log.warn(
-      `experimental.swcLoader enabled. The custom Babel configuration will not be used.`
+      `Disabled SWC because of custom Babel configuration "${path.relative(
+        dir,
+        babelConfigFile
+      )}" https://nextjs.org/docs/messages/swc-disabled`
     )
+    loggedSwcDisabled = true
   }
   const defaultLoaders = {
     babel: useSWCLoader
@@ -946,7 +952,6 @@ export default async function getBaseWebpackConfig(
             parallel: config.experimental.cpus,
             swcMinify: config.experimental.swcMinify,
             terserOptions,
-            middlewareEnabled: config.experimental.middleware,
           }).apply(compiler)
         },
         // Minify CSS
@@ -1197,9 +1202,6 @@ export default async function getBaseWebpackConfig(
         }),
         'process.env.__NEXT_ROUTER_BASEPATH': JSON.stringify(config.basePath),
         'process.env.__NEXT_HAS_REWRITES': JSON.stringify(hasRewrites),
-        'process.env.__NEXT_HAS_MIDDLEWARE': JSON.stringify(
-          config.experimental.middleware
-        ),
         'process.env.__NEXT_I18N_SUPPORT': JSON.stringify(!!config.i18n),
         'process.env.__NEXT_I18N_DOMAINS': JSON.stringify(config.i18n?.domains),
         'process.env.__NEXT_ANALYTICS_ID': JSON.stringify(config.analyticsId),
@@ -1278,9 +1280,7 @@ export default async function getBaseWebpackConfig(
         new PagesManifestPlugin({ serverless: isLikeServerless, dev }),
       // MiddlewarePlugin should be after DefinePlugin so  NEXT_PUBLIC_*
       // replacement is done before its process.env.* handling
-      !isServer &&
-        config.experimental.middleware &&
-        new MiddlewarePlugin({ dev }),
+      !isServer && new MiddlewarePlugin({ dev }),
       isServer && new NextJsSsrImportPlugin(),
       !isServer &&
         new BuildManifestPlugin({
